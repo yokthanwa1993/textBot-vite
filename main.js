@@ -29,6 +29,12 @@ async function checkLiffSession() {
 
     if (!liff.isLoggedIn()) {
       console.warn('LIFF not logged in');
+      // Auto login in LIFF environment
+      if (liff.isInClient()) {
+        liff.login({ redirectUri: window.location.href });
+      } else {
+        liff.login();
+      }
       return false;
     }
 
@@ -552,11 +558,24 @@ async function initLiffAndDisplay() {
     // init LIFF ครั้งเดียว
     await liff.init({ liffId: CONFIG.LIFF_ID });
     console.log('LIFF initialized successfully');
+    console.log('LIFF Environment:', {
+      isInClient: liff.isInClient(),
+      isLoggedIn: liff.isLoggedIn(),
+      os: liff.getOS(),
+      version: liff.getVersion(),
+      language: liff.getLanguage(),
+      liffId: CONFIG.LIFF_ID
+    });
     
     // ตรวจสอบว่า login แล้วหรือยัง
     if (!liff.isLoggedIn()) {
       console.log('User not logged in, redirecting to login...');
-      liff.login();
+      // ใน LIFF environment ให้ login แบบ redirect
+      if (liff.isInClient()) {
+        liff.login({ redirectUri: window.location.href });
+      } else {
+        liff.login();
+      }
       return;
     }
     

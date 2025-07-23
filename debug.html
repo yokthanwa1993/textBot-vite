@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Environment Variables</title>
+</head>
+<body>
+    <h1>Environment Variables Debug</h1>
+    <div id="debug"></div>
+    
+    <script type="module">
+        const debugInfo = {
+            VITE_LIFF_ID: import.meta.env.VITE_LIFF_ID,
+            VITE_GRAPHQL_URL: import.meta.env.VITE_GRAPHQL_URL,
+            VITE_SERVER_PORT: import.meta.env.VITE_SERVER_PORT,
+            VITE_FETCH_TIMEOUT: import.meta.env.VITE_FETCH_TIMEOUT,
+            VITE_ALLOWED_HOSTS: import.meta.env.VITE_ALLOWED_HOSTS,
+            NODE_ENV: import.meta.env.NODE_ENV,
+            PROD: import.meta.env.PROD,
+            DEV: import.meta.env.DEV
+        };
+        
+        document.getElementById('debug').innerHTML = '<pre>' + JSON.stringify(debugInfo, null, 2) + '</pre>';
+        console.log('Environment Variables:', debugInfo);
+    </script>
+</body>
+</html>
