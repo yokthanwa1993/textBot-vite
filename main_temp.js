@@ -15,11 +15,24 @@ async function saveOCRMessage() {
   saveButton.disabled = true;
   
   try {
-    if (!currentUserId) {
-      throw new Error('Please login through LINE to continue.');
+    // ถ้าไม่มี currentUserId ให้ดึงจาก LIFF profile
+    let userId = currentUserId;
+    if (!userId) {
+      try {
+        if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
+          const profile = await liff.getProfile();
+          userId = profile.userId;
+          currentUserId = userId; // เก็บไว้ใช้ครั้งต่อไป
+          console.log('Retrieved user ID from LIFF profile:', userId);
+        }
+      } catch (error) {
+        console.error('Failed to get LIFF profile:', error);
+      }
     }
     
-    const userId = currentUserId;
+    if (!userId) {
+      throw new Error('Please login through LINE to continue.');
+    }
     
     const mutation = `
       mutation SaveMessage($text: String!, $userId: String!) {

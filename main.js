@@ -93,11 +93,19 @@ async function fetchWithTimeout(url, options, timeout = CONFIG.FETCH_TIMEOUT) {
 }
 
 async function graphQLRequest(query, variables = {}) {
+  console.log('=== GraphQL Request Debug ===');
+  console.log('URL:', GRAPHQL_URL);
+  console.log('Query:', query);
+  console.log('Variables:', variables);
+  
   // Get LIFF access token
   let accessToken = null;
   try {
     if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
       accessToken = liff.getAccessToken();
+      console.log('Access token obtained:', accessToken ? 'Yes' : 'No');
+    } else {
+      console.warn('LIFF not available or not logged in');
     }
   } catch (error) {
     console.warn('Failed to get LIFF access token:', error);
@@ -107,33 +115,49 @@ async function graphQLRequest(query, variables = {}) {
   if (accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
-
-  const response = await fetchWithTimeout(GRAPHQL_URL, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ query, variables })
-  });
-
-  if (!response.ok) {
-    // Check if it's an authentication error
-    if (response.status === 401 || response.status === 403) {
-      throw new Error('Session expired. Please refresh the page and try again.');
-    }
-    throw new Error(`HTTP error! status: ${response.status}`);
-  }
-
-  const data = await response.json();
   
-  if (data.errors) {
-    const errorMessage = data.errors[0]?.message || 'Unknown error';
-    // Check for token expiration errors
-    if (errorMessage.includes('token') || errorMessage.includes('auth')) {
-      throw new Error('Session expired. Please refresh the page and try again.');
+  console.log('Request headers:', headers);
+
+  try {
+    const response = await fetchWithTimeout(GRAPHQL_URL, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ query, variables })
+    });
+
+    console.log('Response status:', response.status);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('HTTP Error Response:', errorText);
+      
+      // Check if it's an authentication error
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Session expired. Please refresh the page and try again.');
+      }
+      throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
     }
-    throw new Error(`GraphQL error: ${errorMessage}`);
+
+    const data = await response.json();
+    console.log('GraphQL Response:', data);
+    
+    if (data.errors) {
+      const errorMessage = data.errors[0]?.message || 'Unknown error';
+      console.error('GraphQL Errors:', data.errors);
+      
+      // Check for token expiration errors
+      if (errorMessage.includes('token') || errorMessage.includes('auth')) {
+        throw new Error('Session expired. Please refresh the page and try again.');
+      }
+      throw new Error(`GraphQL error: ${errorMessage}`);
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('GraphQL Request Failed:', error);
+    throw error;
   }
-  
-  return data;
 }
 
 // Data fetching functions
@@ -362,11 +386,24 @@ async function saveMessage() {
       throw new Error('Session expired. Please refresh the page and try again.');
     }
 
-    if (!currentUserId) {
+    // ถ้าไม่มี currentUserId ให้ดึงจาก LIFF profile
+    let userId = currentUserId;
+    if (!userId) {
+      try {
+        if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
+          const profile = await liff.getProfile();
+          userId = profile.userId;
+          currentUserId = userId; // เก็บไว้ใช้ครั้งต่อไป
+          console.log('Retrieved user ID from LIFF profile:', userId);
+        }
+      } catch (error) {
+        console.error('Failed to get LIFF profile:', error);
+      }
+    }
+    
+    if (!userId) {
       throw new Error('Please login through LINE to continue.');
     }
-
-    const userId = currentUserId;
     const urlParams = new URLSearchParams(window.location.search);
     const messageId = urlParams.get('messageId');
     
@@ -440,6 +477,23 @@ async function saveMessage() {
     
   } catch (error) {
     console.error('Error saving message:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      currentUserId: currentUserId,
+      liffLoggedIn: typeof liff !== 'undefined' ? liff.isLoggedIn() : 'LIFF not available',
+      graphqlUrl: GRAPHQL_URL
+    });
+    
+    // Show detailed error to user for debugging
+    let errorMessage = error.message;
+    if (error.message.includes('fetch')) {
+      errorMessage = 'ไม่สามารถเชื่อมต่อ API ได้';
+    } else if (error.message.includes('GraphQL')) {
+      errorMessage = 'เกิดข้อผิดพลาดในการส่งข้อมูล';
+    } else if (error.message.includes('Session expired') || error.message.includes('token') || error.message.includes('auth')) {
+      errorMessage = 'เซสชันหมดอายุ';
+    }
     
     // Check if it's a session expiration error
     if (error.message.includes('Session expired') || error.message.includes('token') || error.message.includes('auth')) {
@@ -457,14 +511,14 @@ async function saveMessage() {
         }
       }, 1000);
     } else {
-      saveButton.textContent = 'บันทึกไม่สำเร็จ - ลองอีกครั้ง';
+      saveButton.textContent = `บันทึกไม่สำเร็จ: ${errorMessage}`;
       saveButton.style.background = '#E74C3C';
       saveButton.disabled = false;
       
       setTimeout(() => {
         saveButton.textContent = 'บันทึกข้อความ';
         saveButton.style.background = '#000000';
-      }, 3000);
+      }, 5000);
     }
   }
 }
@@ -582,7 +636,12 @@ async function initLiffAndDisplay() {
     // ได้ profile
     const profile = await liff.getProfile();
     currentUserId = profile.userId;
-    console.log('Profile loaded:', currentUserId);
+    console.log('Profile loaded:', {
+      userId: currentUserId,
+      displayName: profile.displayName,
+      pictureUrl: profile.pictureUrl,
+      statusMessage: profile.statusMessage
+    });
     
     if (!currentUserId) {
       throw new Error('Failed to get user profile. Please try again.');
